@@ -1,0 +1,30 @@
+# macOS / Obsidian local state
+.DS_Store
+.trash/
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/graph.json
+.obsidian/app.json
+
+# Do not publish installed plugin/theme bundles.
+# Keep plugin data/config files when useful, but let users install plugins themselves.
+.obsidian/plugins/*/main.js
+.obsidian/plugins/*/styles.css
+.obsidian/plugins/*/manifest.json
+.obsidian/themes/
+
+# Personal training data is private by default.
+Workouts/*.md
+!Workouts/.gitkeep
+
+# Local Apple Health / Garmin import payloads are private by default.
+Imports/*
+!Imports/.gitkeep
+!Imports/README.md
+
+# Local backups / scratch copies
+*_copy.*
+* copy.*
+System/workout-template 1.md
+System/workout-template 2.md
+.obsidian/snippets/_fitness-liquid-glass copy.css

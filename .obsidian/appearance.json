@@ -1,0 +1,13 @@
+{
+  "theme": "obsidian",
+  "baseFontSize": 16,
+  "cssTheme": "",
+  "enabledCssSnippets": [
+    "fitness-liquid-glass"
+  ],
+  "slidingSidebar": false,
+  "floatingNavigation": false,
+  "nativeMenus": false,
+  "showViewHeader": false,
+  "showRibbon": true
+}

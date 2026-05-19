@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<HealthData locale="en_AU">
+  <Record type="HKQuantityTypeIdentifierHeartRate" unit="count/min" startDate="2026-05-17 19:54:00 +1000" endDate="2026-05-17 19:54:05 +1000" value="162"/>
+  <Record type="HKQuantityTypeIdentifierHeartRate" unit="count/min" startDate="2026-05-17 20:10:00 +1000" endDate="2026-05-17 20:10:05 +1000" value="168"/>
+  <Workout workoutActivityType="HKWorkoutActivityTypeRunning" duration="59.9167" durationUnit="min" totalDistance="10" totalDistanceUnit="km" startDate="2026-05-17 19:53:00 +1000" endDate="2026-05-17 20:52:55 +1000">
+    <MetadataEntry key="HKMetadataKeySyncIdentifier" value="fixture-apple-run-1"/>
+  </Workout>
+  <Workout workoutActivityType="HKWorkoutActivityTypeSwimming" duration="30" durationUnit="min" totalDistance="1000" totalDistanceUnit="m" startDate="2026-05-18 07:30:00 +1000" endDate="2026-05-18 08:00:00 +1000">
+    <MetadataEntry key="HKMetadataKeySyncIdentifier" value="fixture-apple-swim-1"/>
+  </Workout>
+  <Workout workoutActivityType="HKWorkoutActivityTypeCycling" duration="45" durationUnit="min" totalDistance="18" totalDistanceUnit="km" startDate="2026-05-19 17:15:00 +1000" endDate="2026-05-19 18:00:00 +1000">
+    <MetadataEntry key="HKMetadataKeySyncIdentifier" value="fixture-apple-cycle-1"/>
+  </Workout>
+  <Workout workoutActivityType="HKWorkoutActivityTypeWalking" duration="20" durationUnit="min" totalDistance="1.8" totalDistanceUnit="km" startDate="2026-05-20 12:00:00 +1000" endDate="2026-05-20 12:20:00 +1000">
+    <MetadataEntry key="HKMetadataKeySyncIdentifier" value="fixture-apple-walk-skipped"/>
+  </Workout>
+</HealthData>
