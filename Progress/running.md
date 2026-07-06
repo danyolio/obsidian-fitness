@@ -250,9 +250,10 @@ function zone2Share(p) {
 
 function isZone2BenchmarkRun(p) {
   const type = String(p.run_type || "").toLowerCase();
-  const hard = type.includes("tempo") || type.includes("interval") || type.includes("race");
+  const effort = num(p.run_perceived_effort);
+  const hard = type.includes("tempo") || type.includes("interval") || type.includes("race") || effort >= 7;
   const zone2 = num(p.run_zone2_time_min);
-  return !hard && zone2 >= 30 && zone2Share(p) >= 0.5;
+  return !hard && zone2 >= 30;
 }
 
 function benchmarkHr(p) {
@@ -260,93 +261,82 @@ function benchmarkHr(p) {
   return hr >= 60 && hr <= 220 ? hr : null;
 }
 
+function monthLabel(key) {
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return months[num(key.slice(5, 7)) - 1] || key;
+}
+
 function hrBenchmarkChart(parent, source) {
-  const weekCount = 12;
-  const windowStart = weekStart(todayKey);
-  windowStart.setDate(windowStart.getDate() - (weekCount - 1) * 7);
-  const windowEnd = dateObj(todayKey);
-  const rows = source
-    .filter(p => {
-      const date = dateObj(p.date);
-      return date >= windowStart && date <= windowEnd && benchmarkHr(p) && isZone2BenchmarkRun(p);
-    })
-    .map(p => ({
+  const groups = new Map();
+  for (const p of source) {
+    if (!benchmarkHr(p) || !isZone2BenchmarkRun(p)) continue;
+    const key = dateKey(p.date).slice(0, 7);
+    const rows = groups.get(key) || [];
+    rows.push({
       p,
       date:dateKey(p.date),
-      dateObj:dateObj(p.date),
       distance:num(p.run_distance_km),
       minutes:runMinutes(p),
       zone2:num(p.run_zone2_time_min),
       zone2Pct:zone2Share(p),
       hr:benchmarkHr(p)
-    }))
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .slice(-12);
+    });
+    groups.set(key, rows);
+  }
+
+  const rows = Array.from(groups.entries())
+    .map(([month, runs]) => {
+      const avgHr = runs.reduce((sum, row) => sum + row.hr, 0) / runs.length;
+      const avgDistance = runs.reduce((sum, row) => sum + row.distance, 0) / runs.length;
+      const avgMinutes = runs.reduce((sum, row) => sum + row.minutes, 0) / runs.length;
+      const avgZone2 = runs.reduce((sum, row) => sum + row.zone2, 0) / runs.length;
+      return {month, runs, avgHr, avgDistance, avgMinutes, avgZone2};
+    })
+    .sort((a, b) => a.month.localeCompare(b.month))
+    .slice(-6);
 
   const box = parent.createEl("div", {attr:{style:"background:rgba(255,255,255,0.045);border:1px solid rgba(255,255,255,0.09);border-radius:18px;padding:13px 13px 11px;margin:2px 0 22px;"}});
   const head = box.createEl("div", {attr:{style:"display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin:0 2px 8px;"}});
   const leftHead = head.createEl("div", {attr:{style:"min-width:0;"}});
-  leftHead.createEl("div", {text:"12 Week Zone 2 HR", attr:{style:"font-size:14px;font-weight:820;color:#fff;"}});
-  leftHead.createEl("div", {text:"each dot: 30+ min Z2, 50%+ session", attr:{style:"font-size:11px;color:rgba(255,255,255,0.42);margin-top:3px;"}});
+  leftHead.createEl("div", {text:"Zone 2 HR by Month", attr:{style:"font-size:14px;font-weight:820;color:#fff;"}});
+  leftHead.createEl("div", {text:"non-hard runs with 30+ min Z2", attr:{style:"font-size:11px;color:rgba(255,255,255,0.42);margin-top:3px;"}});
   const rightHead = head.createEl("div", {attr:{style:"text-align:right;flex-shrink:0;"}});
 
   if (!rows.length) {
     rightHead.createEl("div", {text:"-", attr:{style:"font-size:18px;font-weight:850;color:#34D399;line-height:1;"}});
     rightHead.createEl("div", {text:"no benchmark yet", attr:{style:"font-size:11px;color:rgba(255,255,255,0.42);margin-top:5px;"}});
-    box.createEl("div", {text:"Log a non-hard run with average HR, 30+ minutes in Zone 2, and at least half the session in Zone 2 to start this benchmark.", attr:{style:"background:rgba(255,255,255,0.025);border-radius:15px;padding:18px 16px;font-size:12px;line-height:1.4;color:rgba(255,255,255,0.46);"}});
+    box.createEl("div", {text:"Log a non-hard run with average HR and 30+ minutes in Zone 2 to start this benchmark.", attr:{style:"background:rgba(255,255,255,0.025);border-radius:15px;padding:18px 16px;font-size:12px;line-height:1.4;color:rgba(255,255,255,0.46);"}});
     return;
   }
 
   const latest = rows[rows.length - 1];
-  const first = rows[0];
-  const delta = latest.hr - first.hr;
+  const previous = rows.length > 1 ? rows[rows.length - 2] : null;
+  const delta = previous ? latest.avgHr - previous.avgHr : 0;
   const deltaText = rows.length > 1
-    ? `${Math.abs(Math.round(delta))} bpm ${delta < -0.5 ? "lower" : delta > 0.5 ? "higher" : "steady"} vs first`
-    : "add another benchmark";
+    ? `${Math.abs(Math.round(delta))} bpm ${delta < -0.5 ? "lower" : delta > 0.5 ? "higher" : "steady"} vs ${monthLabel(previous.month)}`
+    : "need another month";
   const trendColor = rows.length < 2 ? "#34D399" : delta < -0.5 ? "#30D158" : delta > 0.5 ? "#FF9500" : "#5AC8FA";
 
-  rightHead.createEl("div", {text:Math.round(latest.hr) + " bpm", attr:{style:`font-size:18px;font-weight:850;color:${trendColor};line-height:1;`}});
+  rightHead.createEl("div", {text:Math.round(latest.avgHr) + " bpm", attr:{style:`font-size:18px;font-weight:850;color:${trendColor};line-height:1;`}});
   rightHead.createEl("div", {text:deltaText, attr:{style:"font-size:11px;color:rgba(255,255,255,0.42);margin-top:5px;"}});
 
-  const minHr = Math.min(...rows.map(row => row.hr));
-  const maxHr = Math.max(...rows.map(row => row.hr));
-  const axisMin = Math.min(100, Math.floor((minHr - 8) / 5) * 5);
-  const axisMax = Math.max(180, Math.ceil((maxHr + 8) / 5) * 5);
-  const w = 340, h = 188, left = 36, right = 24, top = 24, bottom = 34;
-  const chartW = w - left - right;
-  const chartH = h - top - bottom;
-  const windowMs = Math.max(1, windowEnd - windowStart);
-  const xFor = row => left + ((row.dateObj - windowStart) / windowMs) * chartW;
-  const yFor = hr => top + chartH - ((hr - axisMin) / (axisMax - axisMin)) * chartH;
-  const points = rows.map(row => `${xFor(row).toFixed(1)},${yFor(row.hr).toFixed(1)}`).join(" ");
-  const grid = [axisMax, Math.round((axisMin + axisMax) / 2), axisMin].map(value => {
-    const y = yFor(value);
-    return `<line x1="${left}" y1="${y.toFixed(1)}" x2="${w - right}" y2="${y.toFixed(1)}" stroke="rgba(255,255,255,0.07)"/>
-      <text x="4" y="${(y + 3).toFixed(1)}" fill="rgba(255,255,255,0.34)" font-size="9" font-weight="700">${value}</text>`;
-  }).join("");
-  const dots = rows.map((row, i) => `<circle cx="${xFor(row).toFixed(1)}" cy="${yFor(row.hr).toFixed(1)}" r="4" fill="${i === rows.length - 1 ? trendColor : "#34D399"}"/>`).join("");
-  const startLabel = weekLabel(windowStart);
-  const endLabel = weekLabel(windowEnd);
-  const latestDetail = [
-    Math.round(latest.minutes) + " min",
-    Math.round(latest.zone2) + " min Z2",
-    Math.round(latest.zone2Pct * 100) + "%",
-    latest.distance ? latest.distance.toFixed(1) + "km" : "",
-    runPace(latest.p)
-  ].filter(Boolean).join(" - ");
+  const minHr = Math.min(120, Math.floor((Math.min(...rows.map(row => row.avgHr)) - 5) / 5) * 5);
+  const maxHr = Math.max(170, Math.ceil((Math.max(...rows.map(row => row.avgHr)) + 5) / 5) * 5);
+  const span = Math.max(1, maxHr - minHr);
+  const list = box.createEl("div", {attr:{style:"display:flex;flex-direction:column;gap:8px;margin-top:10px;"}});
+  for (const row of rows) {
+    const marker = Math.max(0, Math.min(100, ((row.avgHr - minHr) / span) * 100));
+    const active = row === latest;
+    const item = list.createEl("div", {attr:{style:`background:rgba(255,255,255,0.025);border:1px solid ${active ? "rgba(52,211,153,0.32)" : "rgba(255,255,255,0.06)"};border-radius:14px;padding:10px 11px;`}});
+    const topRow = item.createEl("div", {attr:{style:"display:flex;align-items:baseline;justify-content:space-between;gap:10px;"}});
+    topRow.createEl("div", {text:monthLabel(row.month), attr:{style:"font-size:13px;font-weight:820;color:#fff;"}});
+    topRow.createEl("div", {text:Math.round(row.avgHr) + " bpm", attr:{style:`font-size:14px;font-weight:820;color:${active ? trendColor : "rgba(255,255,255,0.82)"};white-space:nowrap;`}});
+    item.createEl("div", {text:`${row.runs.length} run${row.runs.length === 1 ? "" : "s"} - ${Math.round(row.avgZone2)} min Z2 avg - ${row.avgDistance.toFixed(1)}km avg`, attr:{style:"font-size:11px;color:rgba(255,255,255,0.42);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"}});
+    const bar = item.createEl("div", {attr:{style:"height:5px;background:rgba(255,255,255,0.07);border-radius:999px;margin-top:8px;position:relative;"}});
+    bar.createEl("div", {attr:{style:`position:absolute;left:${marker.toFixed(0)}%;top:50%;width:9px;height:9px;margin:-4.5px 0 0 -4.5px;background:${active ? trendColor : "#34D399"};border-radius:999px;box-shadow:0 0 0 3px rgba(52,211,153,0.12);`}});
+  }
 
-  const svg = box.createEl("div");
-  svg.innerHTML = `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;display:block;">
-    <rect x="0" y="0" width="${w}" height="${h}" rx="15" fill="rgba(255,255,255,0.018)"/>
-    ${grid}
-    ${rows.length > 1 ? `<polyline points="${points}" fill="none" stroke="#34D399" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>` : ""}
-    ${dots}
-    <line x1="${left}" y1="${top + chartH}" x2="${w - right}" y2="${top + chartH}" stroke="rgba(255,255,255,0.12)"/>
-    <text x="${left}" y="${h - 10}" fill="rgba(255,255,255,0.34)" font-size="9" font-weight="700">${startLabel}</text>
-    <text x="${w - right - 34}" y="${h - 10}" fill="rgba(255,255,255,0.34)" font-size="9" font-weight="700">${endLabel}</text>
-    <text x="${left}" y="17" fill="rgba(255,255,255,0.44)" font-size="9" font-weight="700">avg HR</text>
-  </svg>`;
-  box.createEl("div", {text:`Latest benchmark: ${latestDetail || latest.date}`, attr:{style:"font-size:11px;color:rgba(255,255,255,0.42);margin:2px 2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"}});
+  box.createEl("div", {text:`Latest month: ${monthLabel(latest.month)} - ${latest.runs.length} run${latest.runs.length === 1 ? "" : "s"} - ${Math.round(latest.avgMinutes)} min avg`, attr:{style:"font-size:11px;color:rgba(255,255,255,0.42);margin:9px 2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"}});
 }
 
 const timeTrials = runs
