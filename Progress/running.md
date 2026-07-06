@@ -242,17 +242,17 @@ function runningChart(parent, runSource, sportSource) {
   </svg>`;
 }
 
-function isEasyBenchmarkRun(p) {
-  const type = String(p.run_type || "").toLowerCase();
-  const effort = num(p.run_perceived_effort);
+function zone2Share(p) {
   const minutes = runMinutes(p);
   const zone2 = num(p.run_zone2_time_min);
-  return type.includes("easy") ||
-    type.includes("zone") ||
-    type.includes("base") ||
-    type.includes("recovery") ||
-    (effort > 0 && effort <= 4) ||
-    (minutes > 0 && zone2 >= minutes * 0.6);
+  return minutes > 0 ? zone2 / minutes : 0;
+}
+
+function isZone2BenchmarkRun(p) {
+  const type = String(p.run_type || "").toLowerCase();
+  const hard = type.includes("tempo") || type.includes("interval") || type.includes("race");
+  const zone2 = num(p.run_zone2_time_min);
+  return !hard && zone2 >= 30 && zone2Share(p) >= 0.5;
 }
 
 function benchmarkHr(p) {
@@ -261,15 +261,23 @@ function benchmarkHr(p) {
 }
 
 function hrBenchmarkChart(parent, source) {
+  const weekCount = 12;
+  const windowStart = weekStart(todayKey);
+  windowStart.setDate(windowStart.getDate() - (weekCount - 1) * 7);
+  const windowEnd = dateObj(todayKey);
   const rows = source
     .filter(p => {
-      const distance = num(p.run_distance_km);
-      return distance >= 4.8 && distance <= 5.5 && benchmarkHr(p) && isEasyBenchmarkRun(p);
+      const date = dateObj(p.date);
+      return date >= windowStart && date <= windowEnd && benchmarkHr(p) && isZone2BenchmarkRun(p);
     })
     .map(p => ({
       p,
       date:dateKey(p.date),
+      dateObj:dateObj(p.date),
       distance:num(p.run_distance_km),
+      minutes:runMinutes(p),
+      zone2:num(p.run_zone2_time_min),
+      zone2Pct:zone2Share(p),
       hr:benchmarkHr(p)
     }))
     .sort((a, b) => a.date.localeCompare(b.date))
@@ -278,14 +286,14 @@ function hrBenchmarkChart(parent, source) {
   const box = parent.createEl("div", {attr:{style:"background:rgba(255,255,255,0.045);border:1px solid rgba(255,255,255,0.09);border-radius:18px;padding:13px 13px 11px;margin:2px 0 22px;"}});
   const head = box.createEl("div", {attr:{style:"display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin:0 2px 8px;"}});
   const leftHead = head.createEl("div", {attr:{style:"min-width:0;"}});
-  leftHead.createEl("div", {text:"Easy 5K HR Benchmark", attr:{style:"font-size:14px;font-weight:820;color:#fff;"}});
-  leftHead.createEl("div", {text:"easy/Zone 2 runs, 4.8-5.5km", attr:{style:"font-size:11px;color:rgba(255,255,255,0.42);margin-top:3px;"}});
+  leftHead.createEl("div", {text:"12 Week Zone 2 HR", attr:{style:"font-size:14px;font-weight:820;color:#fff;"}});
+  leftHead.createEl("div", {text:"each dot: 30+ min Z2, 50%+ session", attr:{style:"font-size:11px;color:rgba(255,255,255,0.42);margin-top:3px;"}});
   const rightHead = head.createEl("div", {attr:{style:"text-align:right;flex-shrink:0;"}});
 
   if (!rows.length) {
     rightHead.createEl("div", {text:"-", attr:{style:"font-size:18px;font-weight:850;color:#34D399;line-height:1;"}});
     rightHead.createEl("div", {text:"no benchmark yet", attr:{style:"font-size:11px;color:rgba(255,255,255,0.42);margin-top:5px;"}});
-    box.createEl("div", {text:"Log an easy 5K run with average HR to start tracking whether the same work is getting easier.", attr:{style:"background:rgba(255,255,255,0.025);border-radius:15px;padding:18px 16px;font-size:12px;line-height:1.4;color:rgba(255,255,255,0.46);"}});
+    box.createEl("div", {text:"Log a non-hard run with average HR, 30+ minutes in Zone 2, and at least half the session in Zone 2 to start this benchmark.", attr:{style:"background:rgba(255,255,255,0.025);border-radius:15px;padding:18px 16px;font-size:12px;line-height:1.4;color:rgba(255,255,255,0.46);"}});
     return;
   }
 
@@ -307,18 +315,25 @@ function hrBenchmarkChart(parent, source) {
   const w = 340, h = 188, left = 36, right = 24, top = 24, bottom = 34;
   const chartW = w - left - right;
   const chartH = h - top - bottom;
-  const xFor = i => rows.length === 1 ? left + chartW / 2 : left + (i / (rows.length - 1)) * chartW;
+  const windowMs = Math.max(1, windowEnd - windowStart);
+  const xFor = row => left + ((row.dateObj - windowStart) / windowMs) * chartW;
   const yFor = hr => top + chartH - ((hr - axisMin) / (axisMax - axisMin)) * chartH;
-  const points = rows.map((row, i) => `${xFor(i).toFixed(1)},${yFor(row.hr).toFixed(1)}`).join(" ");
+  const points = rows.map(row => `${xFor(row).toFixed(1)},${yFor(row.hr).toFixed(1)}`).join(" ");
   const grid = [axisMax, Math.round((axisMin + axisMax) / 2), axisMin].map(value => {
     const y = yFor(value);
     return `<line x1="${left}" y1="${y.toFixed(1)}" x2="${w - right}" y2="${y.toFixed(1)}" stroke="rgba(255,255,255,0.07)"/>
       <text x="4" y="${(y + 3).toFixed(1)}" fill="rgba(255,255,255,0.34)" font-size="9" font-weight="700">${value}</text>`;
   }).join("");
-  const dots = rows.map((row, i) => `<circle cx="${xFor(i).toFixed(1)}" cy="${yFor(row.hr).toFixed(1)}" r="4" fill="${i === rows.length - 1 ? trendColor : "#34D399"}"/>`).join("");
-  const startLabel = rows[0].date.slice(5).replace("-", "/");
-  const endLabel = latest.date.slice(5).replace("-", "/");
-  const latestDetail = [latest.distance.toFixed(1) + "km", runTimeLabel(latest.p), runPace(latest.p)].filter(Boolean).join(" - ");
+  const dots = rows.map((row, i) => `<circle cx="${xFor(row).toFixed(1)}" cy="${yFor(row.hr).toFixed(1)}" r="4" fill="${i === rows.length - 1 ? trendColor : "#34D399"}"/>`).join("");
+  const startLabel = weekLabel(windowStart);
+  const endLabel = weekLabel(windowEnd);
+  const latestDetail = [
+    Math.round(latest.minutes) + " min",
+    Math.round(latest.zone2) + " min Z2",
+    Math.round(latest.zone2Pct * 100) + "%",
+    latest.distance ? latest.distance.toFixed(1) + "km" : "",
+    runPace(latest.p)
+  ].filter(Boolean).join(" - ");
 
   const svg = box.createEl("div");
   svg.innerHTML = `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;display:block;">
